@@ -1,45 +1,27 @@
-#ifndef VECTOR2D_H
-#define VECTOR2D_H
+#pragma once
 
-// A simple 2D vector class used for position, velocity, and acceleration.
-class Vector2D {
-private:
-    double x; // x-component of the vector
-    double y; // y-component of the vector
-
+class vec {
 public:
-    // Default constructor sets vector to (0,0)
-    Vector2D();
+    vec(double a, double b, double c) : x(a), y(b), z(c) {}
 
-    // Constructor that sets vector to (xValue, yValue)
-    Vector2D(double xValue, double yValue);
+    double operator[](int i) const {
+        if (i == 0) return x;
+        if (i == 1) return y;
+        return z;
+    }
 
-    // Gets values
-    double getX() const;
-    double getY() const;
+    double dot(const vec& v) const {
+        return x * v.x + y * v.y + z * v.z;
+    }
 
-    // Sets Values
-    void setX(double xValue);
-    void setY(double yValue);
+    vec cross(const vec& v) const {
+        return vec(
+            y * v.z - z * v.y,
+            z * v.x - x * v.z,
+            x * v.y - y * v.x
+        );
+    }
 
-    // Returns the vector length: sqrt(x^2 + y^2)
-    double magnitude() const;
-
-    // Returns x^2 + y^2
-    double magnitudeSquared() const;
-
-    // Returns a unit vector (same direction)
-    Vector2D normalized() const;
-
-    // Vector math operators
-    Vector2D operator+(const Vector2D& other) const;
-    Vector2D operator-(const Vector2D& other) const;
-    Vector2D operator*(double scalar) const;
-    Vector2D operator/(double scalar) const;
-
-    // Compound assignment operators
-    Vector2D& operator+=(const Vector2D& other);
-    Vector2D& operator-=(const Vector2D& other);
+private:
+    double x, y, z;
 };
-
-#endif
