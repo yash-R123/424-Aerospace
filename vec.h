@@ -3,8 +3,10 @@
 
 class vec {
 public:
+// constructor
     vec(double a, double b, double c) : x(a), y(b), z(c) {}
 
+// operators
     double operator[](int i) const {
         if (i == 0) return x;
         if (i == 1) return y;
