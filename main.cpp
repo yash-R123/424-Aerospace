@@ -1,6 +1,6 @@
 #include <iostream>
 #include <iomanip>
-#include "Vector2D.h"
+#include "vec.h"
 #include "Satellite.h"
 #include "OrbitSimulator.h"
 #include "ManeuverController.h"
