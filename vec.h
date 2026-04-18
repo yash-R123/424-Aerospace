@@ -1,4 +1,5 @@
 #pragma once
+#include <ostream>
 
 class vec {
 public:
@@ -10,19 +11,26 @@ public:
         return z;
     }
 
-  
-    double dot(const vec& v) const {
-        return x * v.x + y * v.y + z * v.z;
-    }
+    vec operator+(const vec& o) const { return vec(x+o.x, y+o.y, z+o.z); }
+    vec operator-(const vec& o) const { return vec(x-o.x, y-o.y, z-o.z); }
+    vec operator-()             const { return vec(-x, -y, -z); }
+    vec operator*(double s)     const { return vec(x*s, y*s, z*s); }
+    vec operator/(double s)     const { return vec(x/s, y/s, z/s); }
 
-    vec cross(const vec& v) const {
-        return vec(
-            y * v.z - z * v.y,
-            z * v.x - x * v.z,
-            x * v.y - y * v.x
-        );
-    }
+    vec& operator+=(const vec& o) { x+=o.x; y+=o.y; z+=o.z; return *this; }
+    vec& operator-=(const vec& o) { x-=o.x; y-=o.y; z-=o.z; return *this; }
+    vec& operator*=(double s)     { x*=s;   y*=s;   z*=s;   return *this; }
+    vec& operator/=(double s)     { x/=s;   y/=s;   z/=s;   return *this; }
+
+    double dot(const vec& o)   const;
+    vec    cross(const vec& o) const;
+    double length()            const;
+    vec    normalized()        const;
+
+    friend std::ostream& operator<<(std::ostream& os, const vec& v);
 
 private:
     double x, y, z;
 };
+
+inline vec operator*(double s, const vec& v) { return v * s; }
