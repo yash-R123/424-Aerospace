@@ -4,6 +4,7 @@
 #include "Satellite.h"
 #include "OrbitSimulator.h"
 #include "ManeuverController.h"
+#include "ThermalEquilibirum.h"
 
 using namespace std;
 
@@ -61,6 +62,14 @@ int main() {
              << " | altitude = " << setw(10) << state.altitude
              << endl;
     }
+
+    ThermalSystem sat1(10.0, 900.0, 300.0);
+    ThermalSystem sat2(20.0, 900.0, 250.0);
+
+    sat1.exchangeHeat(sat2);
+
+    cout << "Satellite 1 final temperature: " << sat1.getTemperature() << endl;
+    cout << "Satellite 2 final temperature: " << sat2.getTemperature() << endl;
 
     return 0;
 }
