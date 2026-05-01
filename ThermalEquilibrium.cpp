@@ -1,20 +1,20 @@
 #include "ThermalEquilibrium.h"
 
-ThermalSystem::ThermalSystem(double m, double c, double temp) {
+ThermalEquilibirium::ThermalEquilibirium(double m, double c, double temp) {
     mass = m;
     specificHeat = c;
     temperature = temp;
 }
 
-double ThermalSystem::getTemperature() const {
+double ThermalEquilibirium::ThermalEquilibirium() const {
     return temperature;
 }
 
-void ThermalSystem::setTemperature(double temp) {
+void ThermalEquilibirium::setTemperature(double temp) {
     temperature = temp;
 }
 
-void ThermalSystem::exchangeHeat(ThermalSystem& other) {
+void ThermalEquilibirium::exchangeHeat(ThermalSystem& other) {
     double finalTemp =
         (mass * specificHeat * temperature +
          other.mass * other.specificHeat * other.temperature)
