@@ -4,30 +4,32 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
+#include <windows.h>
 #include <cmath>
 #include <vector>
 #include <string>
 #include <iostream>
 #include <sstream>
+#include <algorithm>
 #include "vec.h"
 #include "satellite.h"
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const double G     = 6.674e-11;
 const double M     = 5.972e24;
-const double DT    = 60.0;        // 60 sim-seconds per physics step
+const double DT    = 60.0;
 const double SCALE = 1.0 / 6371000.0;
 
 // ─── Satellite colors ─────────────────────────────────────────────────────────
 const glm::vec3 SAT_COLORS[] = {
-    {0.2f,  0.85f, 1.0f },  // cyan
-    {1.0f,  0.52f, 0.1f },  // orange
-    {0.35f, 1.0f,  0.45f},  // green
-    {1.0f,  0.28f, 0.52f},  // pink
-    {1.0f,  0.95f, 0.2f },  // yellow
-    {0.75f, 0.38f, 1.0f },  // purple
-    {1.0f,  0.78f, 0.35f},  // gold
-    {0.35f, 0.85f, 0.65f},  // teal
+    {0.2f,  0.85f, 1.0f },
+    {1.0f,  0.52f, 0.1f },
+    {0.35f, 1.0f,  0.45f},
+    {1.0f,  0.28f, 0.52f},
+    {1.0f,  0.95f, 0.2f },
+    {0.75f, 0.38f, 1.0f },
+    {1.0f,  0.78f, 0.35f},
+    {0.35f, 0.85f, 0.65f},
 };
 const int NUM_COLORS = 8;
 
@@ -49,8 +51,8 @@ double timeAccumulator = 0.0;
 float  camYaw   = 0.0f, camPitch = 20.0f, camDist = 4.0f;
 double lastMouseX, lastMouseY;
 bool   mouseDown  = false;
-int    simSpeed   = 20;   // 0–100
-int    focusedSat = -1;   // -1 = free cam
+int    simSpeed   = 20;
+int    focusedSat = -1;
 
 // ─── Physics ──────────────────────────────────────────────────────────────────
 vec acceleration(const vec& pos) {
@@ -71,7 +73,7 @@ void stepRK4(Satellite& s, double dt) {
 
 // ─── Input helpers ────────────────────────────────────────────────────────────
 double promptDouble(const char* label, double def) {
-    printf("    %-24s [%.1f] : ", label, def);
+    printf("    %-28s [%.1f] : ", label, def);
     fflush(stdout);
     std::cin.clear();
     std::string line;
@@ -81,7 +83,7 @@ double promptDouble(const char* label, double def) {
 }
 
 std::string promptStr(const char* label, const char* def) {
-    printf("    %-24s [%s] : ", label, def);
+    printf("    %-28s [%s] : ", label, def);
     fflush(stdout);
     std::cin.clear();
     std::string line;
@@ -90,32 +92,26 @@ std::string promptStr(const char* label, const char* def) {
 }
 
 // ─── Satellite factory ────────────────────────────────────────────────────────
-SatEntry makeSatEntry(const std::string& name,
-    double altKm, double incDeg, double raanDeg,
-    double mass,  double initTemp,
-    int    index)
+SatEntry makeSatEntry(const std::string& name, double altKm, double incDeg, double raanDeg, double mass, double radiusM, 
+    double powerGen, double batCap, double powerUsage, double absorptivity, double emissivity, int index)
 {
     double r    = altKm * 1000.0 + 6371000.0;
     double v    = sqrt(G * M / r);
     double inc  = glm::radians(incDeg);
     double raan = glm::radians(raanDeg);
 
-    // Satellite starts at the ascending node.
-    // The node vector lies in the equatorial plane at angle RAAN from the x-axis.
-    // Position: along the node vector
-    // Velocity: perpendicular to the node, tilted up by inclination
-    vec pos(r * cos(raan),  0.0,  r * sin(raan));
+    vec pos(r * cos(raan), 0.0, r * sin(raan));
     vec vel(-v * sin(raan) * cos(inc),
         v * sin(inc),
         v * cos(raan) * cos(inc));
 
-    return SatEntry{
-        Satellite(name, pos, vel, mass, initTemp),
-        {},
-        SAT_COLORS[index % NUM_COLORS],
-        true,
-        0.0
-    };
+    double surfaceArea = 4.0 * glm::pi<double>() * radiusM * radiusM;
+    ThermalModel thermal(mass, surfaceArea, absorptivity, emissivity, 900.0);
+
+    Satellite sat(name, pos, vel, powerGen, batCap, powerUsage);
+    sat.setThermal(thermal);
+
+    return SatEntry{ sat, {}, SAT_COLORS[index % NUM_COLORS], true, 0.0 };
 }
 
 // ─── GLFW callbacks ───────────────────────────────────────────────────────────
@@ -124,32 +120,37 @@ void mouseButtonCB(GLFWwindow*, int button, int action, int) {
         mouseDown = (action == GLFW_PRESS);
 }
 void cursorCB(GLFWwindow*, double x, double y) {
-    double dx = glm::clamp(x - lastMouseX, -50.0, 50.0);
-    double dy = glm::clamp(y - lastMouseY, -50.0, 50.0);
+    double dx = x - lastMouseX;
+    double dy = y - lastMouseY;
+    if (dx >  50.0) dx =  50.0;
+    if (dx < -50.0) dx = -50.0;
+    if (dy >  50.0) dy =  50.0;
+    if (dy < -50.0) dy = -50.0;
     lastMouseX = x; lastMouseY = y;
     if (!mouseDown) return;
     camYaw   += (float)dx * 0.3f;
     camPitch += (float)dy * 0.3f;
-    camPitch  = glm::clamp(camPitch, -89.0f, 89.0f);
+    if (camPitch >  89.0f) camPitch =  89.0f;
+    if (camPitch < -89.0f) camPitch = -89.0f;
 }
+
 void scrollCB(GLFWwindow*, double, double dy) {
     camDist -= (float)dy * 0.2f;
-    camDist  = glm::clamp(camDist, 1.5f, 20.0f);
+    if (camDist < 1.5f)  camDist = 1.5f;
+    if (camDist > 20.0f) camDist = 20.0f;
 }
+
 void keyCB(GLFWwindow*, int key, int, int action, int) {
     if (action != GLFW_PRESS && action != GLFW_REPEAT) return;
-    if (key == GLFW_KEY_EQUAL) simSpeed = glm::min(simSpeed + 5, 100);
-    if (key == GLFW_KEY_MINUS) simSpeed = glm::max(simSpeed - 5,  0);
+    if (key == GLFW_KEY_EQUAL) { simSpeed += 5; if (simSpeed > 100) simSpeed = 100; }
+    if (key == GLFW_KEY_MINUS) { simSpeed -= 5; if (simSpeed <   0) simSpeed =   0; }
     if (key == GLFW_KEY_R)     simSpeed = 20;
 
-    // 1–8: toggle satellite visibility
     if (key >= GLFW_KEY_1 && key <= GLFW_KEY_8) {
         int idx = key - GLFW_KEY_1;
         if (idx < (int)satellites.size())
             satellites[idx].visible = !satellites[idx].visible;
     }
-
-    // Tab: cycle camera focus
     if (key == GLFW_KEY_TAB) {
         int n = (int)satellites.size();
         if (n > 0)
@@ -199,18 +200,18 @@ void drawTrail(const std::vector<glm::vec3>& trail, const glm::vec3& col) {
 }
 
 void drawEarthMarkings() {
-    const float R       = 1.002f;  // just above the surface to avoid z-fighting
-    const int   SEGS    = 128;
-    const float TWO_PI  = 2.0f * glm::pi<float>();
+    const float R      = 1.002f;
+    const int   SEGS   = 128;
+    const float TWO_PI = 2.0f * glm::pi<float>();
 
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     glEnable(GL_POLYGON_OFFSET_LINE);
     glPolygonOffset(-2.0f, -2.0f);
 
-    // ── Equator ───────────────────────────────────────────────────────────────
+    // Equator
     glLineWidth(2.0f);
-    glColor4f(1.0f, 0.9f, 0.3f, 0.85f);  // warm yellow
+    glColor4f(1.0f, 0.9f, 0.3f, 0.85f);
     glBegin(GL_LINE_LOOP);
     for (int i = 0; i <= SEGS; ++i) {
         float a = TWO_PI * (float)i / SEGS;
@@ -218,7 +219,7 @@ void drawEarthMarkings() {
     }
     glEnd();
 
-    // ── Prime meridian (faint, gives the globe a sense of orientation) ────────
+    // Prime meridian
     glLineWidth(1.0f);
     glColor4f(1.0f, 0.9f, 0.3f, 0.3f);
     glBegin(GL_LINE_LOOP);
@@ -228,44 +229,30 @@ void drawEarthMarkings() {
     }
     glEnd();
 
-    // ── North pole marker ─────────────────────────────────────────────────────
-    // Small cross sitting on the north pole (y = +R)
+    // North pole
     glLineWidth(2.5f);
-    glColor4f(0.55f, 0.85f, 1.0f, 0.95f);  // icy blue
+    glColor4f(0.55f, 0.85f, 1.0f, 0.95f);
     {
-        float arm = 0.07f;   // half-length of the cross arms
-        float py  = R;
-
+        float arm = 0.07f, py = R;
         glBegin(GL_LINES);
-        // horizontal arm (x-axis)
-        glVertex3f(-arm, py, 0.0f);
-        glVertex3f( arm, py, 0.0f);
-        // horizontal arm (z-axis)
-        glVertex3f(0.0f, py, -arm);
-        glVertex3f(0.0f, py,  arm);
+        glVertex3f(-arm, py, 0.0f); glVertex3f( arm, py, 0.0f);
+        glVertex3f(0.0f, py, -arm); glVertex3f(0.0f, py,  arm);
         glEnd();
-
-        // Small dot
         glPointSize(6.0f);
         glBegin(GL_POINTS);
         glVertex3f(0.0f, py, 0.0f);
         glEnd();
     }
 
-    // ── South pole marker ─────────────────────────────────────────────────────
+    // South pole
     glLineWidth(2.0f);
     glColor4f(0.55f, 0.85f, 1.0f, 0.7f);
     {
-        float arm = 0.06f;
-        float py  = -R;
-
+        float arm = 0.06f, py = -R;
         glBegin(GL_LINES);
-        glVertex3f(-arm, py, 0.0f);
-        glVertex3f( arm, py, 0.0f);
-        glVertex3f(0.0f, py, -arm);
-        glVertex3f(0.0f, py,  arm);
+        glVertex3f(-arm, py, 0.0f); glVertex3f( arm, py, 0.0f);
+        glVertex3f(0.0f, py, -arm); glVertex3f(0.0f, py,  arm);
         glEnd();
-
         glPointSize(5.0f);
         glBegin(GL_POINTS);
         glVertex3f(0.0f, py, 0.0f);
@@ -277,7 +264,11 @@ void drawEarthMarkings() {
 }
 
 void drawSatMarker(const SatEntry& e) {
-    glColor3f(e.color.r, e.color.g, e.color.b);
+    float t          = (float)glm::clamp((e.sat.temp - 200.0) / 200.0, 0.0, 1.0);
+    float brightness = e.sat.inEclipse ? 0.4f : 1.0f;
+    glColor3f(e.color.r * brightness * (1.0f - t * 0.5f),
+        e.color.g * brightness * (1.0f - t * 0.3f),
+        e.color.b * brightness);
     glPushMatrix();
     glTranslatef((float)(e.sat.pos[0]*SCALE),
         (float)(e.sat.pos[1]*SCALE),
@@ -289,32 +280,41 @@ void drawSatMarker(const SatEntry& e) {
 // ─── Telemetry ────────────────────────────────────────────────────────────────
 void printTelemetry(double simMult) {
     int n = (int)satellites.size();
-    printf("\033[%dA", n + 2);  // move cursor up to overwrite previous block
+    printf("\033[%dA", n + 2);
 
-    printf("  Speed: %6.0fx   [+/-] change speed   [R] reset   [Tab] focus   [1-%d] toggle\n",
+    printf("  Speed: %6.0fx   [+/-] change   [R] reset   [Tab] focus   [1-%d] toggle\n",
         simMult, n);
-    printf("  %-3s %-12s %13s %13s %9s %8s\n",
-        "   ", "Name", "Altitude", "Speed", "Power", "Temp");
+    printf("  %-3s %-12s %11s %11s %16s %13s %10s %13s\n",
+        "   ", "Name", "Altitude", "Speed", "Battery", "Temp", "Status", "Surf Area");
 
     for (int i = 0; i < n; ++i) {
-        const auto& e = satellites[i];
-        const auto& s = e.sat;
-        double alt = (s.pos.length() - 6371000.0) / 1000.0;
-        double spd = s.vel.length() / 1000.0;
-        glm::vec3 c = e.color * 255.0f;
-        char focused = (focusedSat == i) ? '>' : ' ';
-        char vis     = e.visible ? '*' : ' ';
-        printf("  %c[%d]%c \033[38;2;%d;%d;%dm%-12s\033[0m  %9.1f km  %8.2f km/s  %7.1f W  %6.0f K\n",
+        const auto& e  = satellites[i];
+        const auto& s  = e.sat;
+        double alt     = (s.pos.length() - 6371000.0) / 1000.0;
+        double spd     = s.vel.length() / 1000.0;
+        double sa      = s.thermal.surfaceArea;
+        glm::vec3 c    = e.color * 255.0f;
+        char focused   = (focusedSat == i) ? '>' : ' ';
+        char vis       = e.visible ? '*' : ' ';
+        const char* status = s.inEclipse ? "ECLIPSE" : "SUNLIT ";
+        printf("  %c[%d]%c \033[38;2;%d;%d;%dm%-12s\033[0m  %8.1f km  %7.2f km/s  %7.1f/%7.1f Wh  %6.1f K  %s  %7.2f m2\n",
             focused, i + 1, vis,
             (int)c.r, (int)c.g, (int)c.b,
-            s.name.c_str(), alt, spd, s.power, s.temp);
+            s.name.c_str(), alt, spd,
+            s.power, s.BatCap,
+            s.temp, status, sa);
     }
     fflush(stdout);
 }
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 int main() {
-    // ── Satellite setup (before the window opens) ─────────────────────────────
+    // Enable ANSI escape codes on Windows
+    HANDLE hOut = GetStdHandle(STD_OUTPUT_HANDLE);
+    DWORD  mode = 0;
+    GetConsoleMode(hOut, &mode);
+    SetConsoleMode(hOut, mode | ENABLE_VIRTUAL_TERMINAL_PROCESSING);
+
     printf("\n");
     printf("  ╔══════════════════════════════════════════╗\n");
     printf("  ║         ORBIT SIMULATOR SETUP            ║\n");
@@ -342,20 +342,39 @@ int main() {
         char defName[16];
         snprintf(defName, sizeof(defName), "SAT-%d", i + 1);
 
-        std::string name = promptStr  ("Name",              defName);
-        double      alt  = promptDouble("Altitude (km)",    400.0);
-        double      inc  = promptDouble("Inclination (deg)", 28.5);
-        double      raan = promptDouble("RAAN (deg)",          0.0);
-        double      mass = promptDouble("Mass (kg)",         500.0);
-        double      temp = promptDouble("Init temp (K)",     293.0);
+        // ── Orbital parameters ──
+        printf("  Orbital parameters:\n");
+        std::string name = promptStr   ("  Name",                defName);
+        double      alt  = promptDouble("  Altitude (km)",        400.0);
+        double      inc  = promptDouble("  Inclination (deg)",     28.5);
+        double      raan = promptDouble("  RAAN (deg)",             0.0);
 
-        satellites.push_back(makeSatEntry(name, alt, inc, raan, mass, temp, i));
+        // ── Physical properties ──
+        printf("  Physical properties:\n");
+        double mass   = promptDouble("  Mass (kg)",              500.0);
+        double radius = promptDouble("  Radius (m)",               1.0);
+
+        // ── Power system ──
+        printf("  Power system:\n");
+        double powerGen   = promptDouble("  Solar power gen (W)",   200.0);
+        double batCap     = promptDouble("  Battery capacity (Wh)", 1000.0);
+        double powerUsage = promptDouble("  Power usage (W)",        100.0);
+
+        // ── Thermal properties ──
+        printf("  Thermal properties:\n");
+        double absorpt  = promptDouble("  Absorptivity (0-1)",      0.3);
+        double emissiv  = promptDouble("  Emissivity (0-1)",         0.8);
+
+        satellites.push_back(makeSatEntry(
+            name, alt, inc, raan,
+            mass, radius,
+            powerGen, batCap, powerUsage,
+            absorpt, emissiv,
+            i));
         printf("\n");
     }
 
     printf("  All satellites configured — launching simulation...\n\n");
-
-    // Reserve terminal lines for the telemetry block
     for (int i = 0; i < (int)satellites.size() + 2; ++i) printf("\n");
 
     // ── GLFW / GLEW ──────────────────────────────────────────────────────────
@@ -379,16 +398,11 @@ int main() {
         double dt  = glm::clamp(now - lastTime, 0.0, 0.1);
         lastTime   = now;
 
-        // Exponential speed scale:
-        //   simSpeed 20  → ~540×  (~1 orbit per ~10 s)
-        //   simSpeed 50  → ~3600× (~1 orbit per ~1.5 s)
-        //   simSpeed 100 → ~28800×
         double simMult = (simSpeed == 0) ? 0.0
             : 60.0 * pow(480.0, simSpeed / 100.0);
 
         timeAccumulator += dt * simMult;
 
-        // Physics
         int steps = 0;
         while (timeAccumulator >= DT && steps < 300) {
             for (auto& e : satellites) stepRK4(e.sat, DT);
@@ -396,7 +410,7 @@ int main() {
             ++steps;
         }
 
-        // Trail sampling (every 50 ms wall-clock)
+        // Trail sampling
         for (auto& e : satellites) {
             if (!e.visible) continue;
             e.trailTimer += dt;
@@ -412,11 +426,11 @@ int main() {
             }
         }
 
-        // Camera (optionally follow a satellite)
+        // Camera
         glm::vec3 lookAt(0.0f);
         if (focusedSat >= 0 && focusedSat < (int)satellites.size()) {
             auto& p = satellites[focusedSat].sat.pos;
-            lookAt = glm::vec3(p[0]*SCALE, p[1]*SCALE, p[2]*SCALE);
+            lookAt  = glm::vec3(p[0]*SCALE, p[1]*SCALE, p[2]*SCALE);
         }
 
         glm::mat4 proj = glm::perspective(glm::radians(45.0f), 1.0f, 0.01f, 100.0f);
@@ -433,7 +447,6 @@ int main() {
         glMatrixMode(GL_PROJECTION); glLoadMatrixf(glm::value_ptr(proj));
         glMatrixMode(GL_MODELVIEW);  glLoadMatrixf(glm::value_ptr(view));
 
-        // Earth
         glColor3f(0.05f, 0.33f, 0.82f);
         drawSphere(1.0f, 64, 64);
         drawEarthMarkings();
